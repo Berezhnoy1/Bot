@@ -1,0 +1,560 @@
+import os
+import json
+import telebot
+import gspread
+import logging
+import random
+from datetime import datetime
+from oauth2client.service_account import ServiceAccountCredentials
+from dotenv import load_dotenv
+
+# Настройка логирования
+logging.basicConfig(
+    filename='bot_log.log',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Загружаем переменные из .env файла
+load_dotenv(dotenv_path="bot.env")
+TOKEN = os.getenv("TOKEN")
+ADMIN_ID = os.getenv("ADMIN_ID")
+
+if not TOKEN or not ADMIN_ID:
+    logger.error("Ошибка! Токен или ID администратора не установлены.")
+    exit()
+
+# Подключаем Google Sheets API
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive"
+]
+
+# Функция для повторного подключения к Google Sheets при потере соединения
+def reconnect_sheets():
+    try:
+        if not os.path.exists("google_sheets.json"):
+            logger.error("Ошибка! Файл google_sheets.json не найден.")
+            return None, None
+
+        with open("google_sheets.json", "r") as file:
+            service_account_info = json.load(file)
+
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(service_account_info, scope)
+        client = gspread.authorize(creds)
+        spreadsheet = client.open("Stats")
+        sheet = spreadsheet.sheet1
+        logger.info("✅ Переподключение к Google Sheets успешно!")
+        return client, sheet
+    except Exception as e:
+        logger.error(f"❌ Ошибка подключения к Google Sheets: {e}")
+        return None, None
+
+# Первичное подключение
+client, sheet = reconnect_sheets()
+if not client or not sheet:
+    exit()
+
+bot = telebot.TeleBot(TOKEN)
+user_data = {}
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    chat_id = message.chat.id
+    user_data[chat_id] = {"name": message.chat.first_name, "username": message.chat.username}
+    start_survey(chat_id)
+
+def start_survey(chat_id):
+    greeting = "Привіт! Я ваш помічник з вивчення англійської мови. Давайте розпочнемо з декількох запитань, щоб краще вас зрозуміти."
+
+    markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.add("1", "2", "3", "4", "5")
+
+    bot.send_message(chat_id, greeting)
+    bot.send_message(chat_id, "Як ви оцінюєте важливість вивчення англійської для себе?\n(Де 1 — не обов'язково, а 5 — терміново.)", reply_markup=markup)
+    bot.register_next_step_handler_by_chat_id(chat_id, process_motivation)
+
+def process_motivation(message):
+    chat_id = message.chat.id
+    if message.text == "/start":
+        start_survey(chat_id)
+        return
+
+    user_data[chat_id]['motivation'] = message.text
+
+    markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.add("1-2 години", "3-4 години", "5-7 годин")
+
+    bot.send_message(chat_id, "Скільки часу ви готові виділяти на навчання щотижня?", reply_markup=markup)
+    bot.register_next_step_handler_by_chat_id(chat_id, process_time)
+
+def process_time(message):
+    chat_id = message.chat.id
+    if message.text == "/start":
+        start_survey(chat_id)
+        return
+
+    user_data[chat_id]['time'] = message.text
+
+    markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.add("100-300 грн", "300-500 грн", "500-700 грн", "Я поки не знаю, хочу розібратися")
+
+    bot.send_message(chat_id, "Яка ціна за один урок для вас прийнятна?", reply_markup=markup)
+    bot.register_next_step_handler_by_chat_id(chat_id, process_budget)
+
+def process_budget(message):
+    chat_id = message.chat.id
+    if message.text == "/start":
+        start_survey(chat_id)
+        return
+
+    user_data[chat_id]['budget'] = message.text
+
+    markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.add("Для роботи", "Для подорожей", "Для переїзду", "Для навчання", "Для розвитку особистих навичок", "Інше")
+
+    bot.send_message(chat_id, "Яка мета вивчення англійської?", reply_markup=markup)
+    bot.register_next_step_handler_by_chat_id(chat_id, process_goal)
+
+def process_goal(message):
+    chat_id = message.chat.id
+    if message.text == "/start":
+        start_survey(chat_id)
+        return
+
+    user_data[chat_id]['goal'] = message.text
+
+    markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.add("A1 (Початковий)", "A2 (Елементарний)", "B1 (Середній)", "B2+ (Вище середнього)", "C1 (Просунутий)", "C2 (Вільне володіння)")
+    markup.add("Дізнатися рівень англійської")
+
+    bot.send_message(chat_id, "Який рівень англійської в тебе?", reply_markup=markup)
+    bot.register_next_step_handler_by_chat_id(chat_id, process_level)
+
+def process_level(message):
+    chat_id = message.chat.id
+    if message.text == "/start":
+        start_survey(chat_id)
+        return
+
+    user_data[chat_id]['level'] = message.text
+
+    if message.text == "Дізнатися рівень англійської":
+        user_data[chat_id]['test_source'] = 'level_question'  # Добавляем метку, что тест начат из вопроса об уровне
+        start_level_test(message)
+    else:
+        continue_survey(message)
+
+def continue_survey(message):
+    chat_id = message.chat.id
+    if message.text == "/start":
+        start_survey(chat_id)
+        return
+
+    markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.add("Групові заняття", "Індивідуальні заняття")
+
+    bot.send_message(chat_id, "Який формат тобі зручний?", reply_markup=markup)
+    bot.register_next_step_handler_by_chat_id(chat_id, process_format)
+
+def process_format(message):
+    chat_id = message.chat.id
+    if message.text == "/start":
+        start_survey(chat_id)
+        return
+
+    user_data[chat_id]['format'] = message.text
+
+    markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.add("Так, я готовий розпочати навчання негайно", "Ні, хочу спочатку пройти пробне заняття")
+
+    bot.send_message(chat_id, "Чи хочете ви розпочати навчання відразу, або краще спочатку пройти пробне заняття?", reply_markup=markup)
+    bot.register_next_step_handler_by_chat_id(chat_id, process_start_choice)
+
+def process_start_choice(message):
+    chat_id = message.chat.id
+    if message.text == "/start":
+        start_survey(chat_id)
+        return
+
+    user_data[chat_id]['start_choice'] = message.text
+
+    markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+    markup.add("За кожен урок", "Помісячно", "Курсом")
+
+    bot.send_message(chat_id, "Як Вам буде зручно сплачувати?", reply_markup=markup)
+    bot.register_next_step_handler_by_chat_id(chat_id, process_payment)
+
+def process_payment(message):
+    chat_id = message.chat.id
+    if message.text == "/start":
+        start_survey(chat_id)
+        return
+
+    user_data[chat_id]['payment'] = message.text
+
+    try:
+        # Запись всех данных в Google Таблицу
+        sheet.append_row([
+            user_data[chat_id].get('name', ''),
+            user_data[chat_id].get('username', ''),
+            user_data[chat_id].get('level', ''),
+            user_data[chat_id].get('goal', ''),
+            user_data[chat_id].get('format', ''),
+            user_data[chat_id].get('start_choice', ''),
+            user_data[chat_id].get('motivation', ''),
+            user_data[chat_id].get('time', ''),
+            user_data[chat_id].get('budget', ''),
+            user_data[chat_id].get('payment', ''),
+            user_data[chat_id].get('obstacles', 'не вказано')  # Используем значение по умолчанию, если ключ отсутствует
+        ])
+        print(f"✅ Данные записаны в Google Таблицу для пользователя {message.chat.first_name}")
+    except Exception as e:
+        print(f"❌ Ошибка записи в таблицу: {e}")
+
+    try:
+        # Уведомляем админа
+        bot.send_message(ADMIN_ID, f"🔔 Нова заявка!\n"
+                                   f"👤 Користувач: {message.chat.first_name} (@{message.chat.username})\n"
+                                   f"📚 Рівень: {user_data[chat_id]['level']}\n"
+                                   f"🎯 Мета: {user_data[chat_id]['goal']}\n"
+                                   f"📌 Формат: {user_data[chat_id]['format']}\n"
+                                   f"🚀 Почати: {user_data[chat_id]['start_choice']}\n"
+                                   f"💡 Мотивація: {user_data[chat_id]['motivation']}\n"
+                                   f"⏳ Час на навчання: {user_data[chat_id]['time']}\n"
+                                   f"💰 Бюджет: {user_data[chat_id]['budget']}\n"
+                                   f"💳 Сплата: {user_data[chat_id]['payment']}\n"
+                                   f"⚠️ Перешкоди: {user_data[chat_id].get('obstacles', 'не вказано')}")
+    except Exception as e:
+        print(f"❌ Ошибка уведомления администратора: {e}")
+
+    # Показываем все варианты после главных вопросов
+    try:
+        markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add("📚 Дізнатися рівень англійської", "💳 Купити курс", "📅 Записатись на пробний урок", "📞 Зв'язатись з менеджером")
+        bot.send_message(chat_id, "Ось ваші варіанти дій:", reply_markup=markup)
+        bot.register_next_step_handler_by_chat_id(chat_id, handle_button_press)
+    except Exception as e:
+        print(f"❌ Ошибка при отправке кнопок: {e}")
+
+def handle_button_press(message):
+    chat_id = message.chat.id
+
+    if message.text == "📚 Дізнатися рівень англійської":
+        user_data[chat_id]['test_source'] = 'main_menu'  # Добавляем метку, что тест начат из главного меню
+        start_level_test(message)
+    elif message.text in ["💳 Купити курс", "📅 Записатись на пробний урок", "📞 Зв'язатись з менеджером"]:
+        ask_for_phone(message)
+
+def ask_for_phone(message):
+    chat_id = message.chat.id
+    bot.send_message(chat_id, "Залиште номер телефону для зворотнього зв'язку:")
+    bot.register_next_step_handler_by_chat_id(chat_id, save_phone)
+
+def save_phone(message):
+    chat_id = message.chat.id
+    phone_number = message.text
+    user_data[chat_id]['phone'] = phone_number
+
+    try:
+        # Обновляем данные в Google Таблице
+        last_row = len(sheet.get_all_values())
+        sheet.update_cell(last_row, 12, phone_number)
+        print(f"✅ Номер телефону збережено для користувача {message.chat.first_name}: {phone_number}")
+    except Exception as e:
+        print(f"❌ Помилка збереження номера телефону: {e}")
+
+    bot.send_message(chat_id, "Дякуємо! Наш менеджер зв'яжеться з вами найближчим часом. Гарного дня! 😊")
+
+def start_level_test(message):
+    chat_id = message.chat.id
+    user_data[chat_id]['current_question'] = 0
+    user_data[chat_id]['correct_answers'] = 0
+    
+    questions = [
+        # A1-A2 (2 вопроса)
+        {
+            "question": "Перекладіть слово 'кіт' на англійську мову",
+            "correct": "Cat",
+            "wrong": ["Dog", "Bird", "Fish"],
+            "difficulty": 1
+        },
+        {
+            "question": "Перекладіть фразу 'Мене звати' на англійську мову",
+            "correct": "My name is",
+            "wrong": ["I am", "Call me", "My title is"],
+            "difficulty": 2
+        },
+        
+        # B1 (2 вопроса)
+        {
+            "question": "Перекладіть фразу 'Мені подобається читати' на англійську мову",
+            "correct": "I like reading",
+            "wrong": ["I read like", "I love read", "I like to read"],
+            "difficulty": 3
+        },
+        {
+            "question": "Що означає фраза 'piece of cake'?",
+            "correct": "Щось легке",
+            "wrong": ["Щось смачне", "Щось складне", "Щось цікаве"],
+            "difficulty": 3
+        },
+        
+        # B2 (2 вопроса)
+        {
+            "question": "Перекладіть фразу 'Я вивчаю англійську мову' на англійську мову",
+            "correct": "I am learning English",
+            "wrong": ["I study English", "I have learned English", "I learn English"],
+            "difficulty": 4
+        },
+        {
+            "question": "Що означає фраза 'spill the beans'?",
+            "correct": "Видати секрет",
+            "wrong": ["Зробити помилку", "Почати розмову", "Зробити щось"],
+            "difficulty": 4
+        },
+        
+        # C1-C2 (4 вопроса)
+        {
+            "question": "Яке значення слова 'ephemeral'?",
+            "correct": "Короткочасний",
+            "wrong": ["Вічний", "Моментальний", "Повільний"],
+            "difficulty": 5
+        },
+        {
+            "question": "Яке значення слова 'serendipity'?",
+            "correct": "Випадкова удача",
+            "wrong": ["Сум", "Злість", "Щастя"],
+            "difficulty": 5
+        },
+        {
+            "question": "Яке значення слова 'quintessential'?",
+            "correct": "Ідеальний",
+            "wrong": ["Недосконалий", "Звичайний", "Складний"],
+            "difficulty": 5
+        },
+        {
+            "question": "Що означає фраза 'hit the nail on the head'?",
+            "correct": "Попасти в точку",
+            "wrong": ["Зробити помилку", "Почати щось нове", "Зупинити щось"],
+            "difficulty": 5
+        }
+    ]
+    
+    # Перемешиваем варианты ответов для каждого вопроса
+    for q in questions:
+        choices = [q['correct']] + q['wrong']
+        random.shuffle(choices)
+        q['choices'] = choices
+        q['answer'] = q['correct']
+    
+    user_data[chat_id]['questions'] = questions
+    ask_question(message)
+
+def ask_question(message):
+    chat_id = message.chat.id
+    question_index = user_data[chat_id]['current_question']
+    questions = user_data[chat_id]['questions']
+
+    if question_index < len(questions):
+        question_data = questions[question_index]
+        
+        # Добавляем прогресс-бар и эмодзи к вопросу
+        progress = f"📝 Питання {question_index + 1}/{len(questions)}"
+        difficulty_stars = "⭐" * question_data["difficulty"]
+        
+        markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+        
+        # Добавляем варианты ответов без эмодзи
+        for choice in question_data["choices"]:
+            markup.add(choice)
+            
+        markup.add("🔙 Повернутися до вибору")
+        
+        # Отправляем вопрос с прогресс-баром и сложностью
+        bot.send_message(chat_id, f"{progress}\n{difficulty_stars}\n\n{question_data['question']}", reply_markup=markup)
+        bot.register_next_step_handler_by_chat_id(chat_id, check_answer)
+    else:
+        show_main_menu(message)
+
+def check_answer(message):
+    chat_id = message.chat.id
+    
+    if message.text == "/start":
+        start_survey(chat_id)
+        return
+        
+    if message.text == "🔙 Повернутися до вибору":
+        if user_data[chat_id].get('test_source') == 'level_question':
+            markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+            markup.add("A1 (Початковий)", "A2 (Елементарний)")
+            markup.add("B1 (Середній)", "B2+ (Вище середнього)")
+            markup.add("C1 (Просунутий)", "C2 (Вільне володіння)")
+            markup.add("Дізнатися рівень англійської")
+            bot.send_message(chat_id, "Який рівень англійської в тебе?", reply_markup=markup)
+            bot.register_next_step_handler_by_chat_id(chat_id, process_level)
+        else:
+            show_main_menu(message)
+        return
+        
+    if message.text == "/start":
+        start_survey(chat_id)
+        return
+        
+    question_index = user_data[chat_id]['current_question']
+    questions = user_data[chat_id]['questions']
+    current_question = questions[question_index]
+    
+    if message.text == current_question["answer"]:
+        user_data[chat_id]['correct_answers'] += 1
+        bot.send_message(chat_id, "✨ Правильно!")
+    else:
+        bot.send_message(chat_id, f"❌ Неправильно. Правильна відповідь: {current_question['answer']}")
+        
+    user_data[chat_id]['current_question'] += 1
+    
+    if user_data[chat_id]['current_question'] >= len(questions):
+        correct = user_data[chat_id]['correct_answers']
+        total = len(questions)
+        percentage = (correct / total) * 100
+        
+        level = "A1 (Початковий)"
+        if percentage >= 90:
+            level = "C2 (Вільне володіння)"
+        elif percentage >= 80:
+            level = "C1 (Просунутий)"
+        elif percentage >= 70:
+            level = "B2+ (Вище середнього)"
+        elif percentage >= 60:
+            level = "B1 (Середній)"
+        elif percentage >= 50:
+            level = "A2 (Елементарний)"
+            
+        user_data[chat_id]['level'] = level
+        
+        # Создаем красивое сообщение с результатами
+        result_message = (
+            f"🎉 Тест завершено! 🎉\n\n"
+            f"📊 Ваш результат: {correct}/{total} правильних відповідей\n"
+            f"📈 Відсоток: {percentage:.1f}%\n"
+            f"🎓 Ваш приблизний рівень: {level}\n\n"
+            f"💫 Дякуємо за проходження тесту!"
+        )
+        
+        bot.send_message(chat_id, result_message)
+        
+        # Сохраняем результаты в Google Sheets с повторными попытками при ошибке
+        try:
+            save_results_to_sheets(message, correct, total, percentage, level)
+        except Exception as e:
+            logger.error(f"Ошибка сохранения в Google Sheets: {e}")
+            # Пробуем переподключиться и сохранить снова
+            global client, sheet
+            client, sheet = reconnect_sheets()
+            if client and sheet:
+                try:
+                    save_results_to_sheets(message, correct, total, percentage, level)
+                except Exception as e:
+                    logger.error(f"Повторная ошибка сохранения в Google Sheets: {e}")
+        
+        if user_data[chat_id].get('test_source') == 'level_question':
+            continue_survey(message)
+        else:
+            show_main_menu(message)
+    else:
+        # Небольшая пауза перед следующим вопросом
+        bot.send_message(chat_id, "⏳ Наступне питання...")
+        ask_question(message)
+
+def save_results_to_sheets(message, correct, total, percentage, level):
+    chat_id = message.chat.id
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Форматируем данные для записи в таблицу
+    row_data = [
+        timestamp,  # Дата та час
+        message.chat.first_name,  # Ім'я
+        f"@{message.chat.username}" if message.chat.username else "Не вказано",  # Нікнейм
+        f"{correct}/{total}",  # Результат тесту
+        f"{percentage:.1f}%",  # Відсоток
+        level,  # Рівень
+        user_data[chat_id].get('goal', 'Не вказано'),  # Мета
+        user_data[chat_id].get('time', 'Не вказано'),  # Час на навчання
+        user_data[chat_id].get('budget', 'Не вказано'),  # Бюджет
+        user_data[chat_id].get('format', 'Не вказано'),  # Формат
+        user_data[chat_id].get('payment', 'Не вказано'),  # Спосіб оплати
+        user_data[chat_id].get('phone', 'Не вказано')  # Телефон
+    ]
+    
+    try:
+        # Проверяем и создаем заголовки, если их нет
+        headers = sheet.row_values(1)
+        if not headers:
+            sheet.append_row([
+                "Дата та час",
+                "Ім'я",
+                "Telegram",
+                "Результат тесту",
+                "Відсоток",
+                "Рівень",
+                "Мета",
+                "Час на навчання",
+                "Бюджет",
+                "Формат",
+                "Спосіб оплати",
+                "Телефон"
+            ])
+            
+            # Форматируем заголовки
+            header_format = {
+                "backgroundColor": {"red": 0.2, "green": 0.2, "blue": 0.2},
+                "textFormat": {"foregroundColor": {"red": 1, "green": 1, "blue": 1}, "bold": True},
+                "horizontalAlignment": "CENTER"
+            }
+            
+            sheet.format("A1:L1", header_format)
+            
+            # Устанавливаем ширину столбцов
+            sheet.set_column_width("A", 150)  # Дата та час
+            sheet.set_column_width("B", 100)  # Ім'я
+            sheet.set_column_width("C", 120)  # Telegram
+            sheet.set_column_width("D", 100)  # Результат тесту
+            sheet.set_column_width("E", 80)   # Відсоток
+            sheet.set_column_width("F", 150)  # Рівень
+            sheet.set_column_width("G", 200)  # Мета
+            sheet.set_column_width("H", 120)  # Час на навчання
+            sheet.set_column_width("I", 100)  # Бюджет
+            sheet.set_column_width("J", 150)  # Формат
+            sheet.set_column_width("K", 120)  # Спосіб оплати
+            sheet.set_column_width("L", 120)  # Телефон
+            
+        # Добавляем данные
+        sheet.append_row(row_data)
+        
+        # Форматируем новую строку
+        last_row = len(sheet.get_all_values())
+        row_format = {
+            "backgroundColor": {"red": 0.95, "green": 0.95, "blue": 0.95},
+            "horizontalAlignment": "CENTER",
+            "textFormat": {"foregroundColor": {"red": 0, "green": 0, "blue": 0}}
+        }
+        
+        sheet.format(f"A{last_row}:L{last_row}", row_format)
+        
+        logger.info(f"✅ Дані успішно записані в таблицю для користувача {message.chat.first_name}")
+    except Exception as e:
+        logger.error(f"❌ Помилка запису в таблицю: {e}")
+
+def show_main_menu(message):
+    chat_id = message.chat.id
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("📚 Дізнатися рівень англійської", "💳 Купити курс", "📅 Записатись на пробний урок", "📞 Зв'язатись з менеджером")
+    bot.send_message(chat_id, "Ось ваші варіанти дій:", reply_markup=markup)
+    bot.register_next_step_handler_by_chat_id(chat_id, handle_button_press)
+
+# Запускаем бота
+print("🤖 Бот запущен!")
+bot.polling(none_stop=True)

@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "antischoolbot",
+  "private_key_id": "84b56ab84dbb3185b47cb35c3074b85825cdeac0",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDa4HtzP1wmWIHK\ncjmrG7AYF4E+sVkkBuWB9JbxMYugrzA99fwAQoFPkrPPcQkCzi29DLyysIR4LuGd\npETZ5r59Z5xImloxdUivP2R8G9r5w5R2Jgla8lrYaaTn3mo08Au4fy41MGFEbjN0\nVv6zfQ1nhPFqSxGyXWjoBTnAUdO7dCffEO44oGjsH59ZBsxUI6I77t5BbVNWxJXn\n4/HXhN73SqpeuYn4rwVGAAVnnoI8WKjA+NIoUnpoed0vYI04yQD9k2Mv37bxEU5H\nBdVEvszrV/krBfxRoF+kGcaq+Dmi1X16oE7F8LblxsMPnG7p/QXXJmeetZoOc5sT\nEwLlEkOPAgMBAAECgf8gKBPCIfB2I4q1JUvh5ehcvjO+14hPXyXKqt2CPLb/udnA\nJDjwCbjZW4mdjO+bTz2FeqCwSrCA97efuJDWyAGJ3Nm1mBQ2aNoaOn0lTPJe+Gs6\n8HgaDyvX2JEanC8a0NQ9VRy77KbPdShvbzwYzVTHREDeTrdZGZkI70nT6U4j9NHf\nf/kAXnTBGPGsEteBDGdTaR5Y0kmEwj36bTKWVHD+HVj2N0KM1wB1K+Qj9Q5I//CB\nae7jqUn8k52zafjzZkFw83GPyqeOvVXfbMFaqn10JCZyERyHTrFfkf8JQzLUAHIh\novpQjB5OSkNinv7LK4OtN25Afoz5bx0To3ourqECgYEA87ElS/BOigk5KV0Agr5T\nM84GTSvPKYnZu41yBfaphVW35UGywpo29Dlhea4kLTl5xmMKtF9XE+7LdKc4nyS0\naa7Fsi5ciDQPKGRlzEitjfk3fV0S0+Nw3xxJzNes5rd0Rwa2UBpIr978uTTcFRxd\nteT/BuHMpf5o2siWoKle9eECgYEA5e58YHotevmaPVG998GrPuIgiCWHskNXHfCN\ndo+/jSHCXn7pSYdiiYp+rSWF2lta5bvzcxJ0U1Fg8o4AjvOtFrDZEDX8OlpHUb2v\nzTr/BWkae5eIg0pvyozT44v0pR1xf6ltONuCSpQUcKY4p+b3l1Ll/F4hIISc3tjX\nJdC8h28CgYEA0JzaR8rdAS/qHi2+bS5O/a8mF9QkEPQwT21DqjVBY6JAveJjDFKG\nLsYcWtUnpQtp4toQZN6lJawrwZ4RS7NZOotiNCmaDwM54qMnvhyNbldlGE2f+4Hd\nszF9P/11x0BPKypk0efeR6hFgqrsqKnS0w7I/vQ3g/ZpfrlusPStFSECgYEAtz+d\nYqqc6qBZG7u04es41pITiU4X2quul47qv24LJKieJv+QX2iF0MZO9SGtjvw18lgb\nyz8O9IQr9sPTkBqGfUoOhMvxrHPc2TmLDc6SBrbgQ1Xel3xQoiYgjP4yyRExLqRS\nBvly2osvyyO+jZoXA0QvRTWjwy3NdBFvTpUQXAMCgYAnSAuugAAu+wH+iedgiMYO\ntGUlgn0qLH7lvQHqpfNuyocPHBsV0SUywyiIKOC02vePiUUT0FnnA1KnBEzO2X3y\nW7vcpHfscHTCFxN8bzaLtvU6L0BIUVuEoI1jLr9C9f834v7ztBcCjOFQw05xY+Lm\npBdypIuf4QgWRVI6T5ifxQ==\n-----END PRIVATE KEY-----\n",
+  "client_email": "antischoolbotservice@antischoolbot.iam.gserviceaccount.com",
+  "client_id": "117211490281643211550",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/antischoolbotservice%40antischoolbot.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
